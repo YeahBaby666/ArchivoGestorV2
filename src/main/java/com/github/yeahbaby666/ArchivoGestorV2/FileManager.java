@@ -5,9 +5,11 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
+import javax.swing.JFileChooser;
+import javax.swing.UIManager;
 
 public class FileManager {
-    private final ArchivoManager gestor;
+    private ArchivoManager gestor;
 
     public FileManager(String rutaRaiz) throws IOException {
         File raiz = new File(rutaRaiz);
@@ -71,23 +73,84 @@ public class FileManager {
     }
     
     public void crearArchivo(String nombre, String contenido) throws IOException {
-        ArchivosUtil.IntArchivo.escribirArchivo(gestor.obtenerElemento(nombre), contenido, false);
+        ArchivosUtil.IntArchivo.escribirArchivo(gestor.obtenerElemento(nombre), contenido, false, false);
         System.out.println("✅ Archivo '" + nombre + "' creado.");
+    }
+    
+    
+     /**
+     * Escritura inteligente para actualizar archivos tipo JSON/config.
+     * Ahora puede procesar tanto una línea como el contenido de un archivo completo.
+     * @param nombreArchivo El archivo a modificar.
+     * @param contenido La línea o bloque de texto a escribir.
+     */
+    public void escribirConfig(String nombreArchivo, String contenido) throws IOException {
+        ArchivosUtil.IntArchivo.escribirArchivo(obtenerFile(nombreArchivo), contenido, true, true);
+        System.out.println("✅ Configuración '" + nombreArchivo + "' actualizada.");
+    }
+    
+    /**
+     * Escritura simple para añadir a logs.
+     */
+    public void escribirLog(String nombreArchivo, String linea) throws IOException {
+        ArchivosUtil.IntArchivo.escribirArchivo(obtenerFile(nombreArchivo), linea, true, false);
+        System.out.println("✅ Línea agregada al log '" + nombreArchivo + "'.");
+    }
+    
+
+    /**
+     * ¡NUEVO Y CORREGIDO!
+     * Devuelve el objeto File para trabajar con otras librerías.
+     */
+    public File obtenerFile(String nombre) {
+        return gestor.obtenerElemento(nombre);
     }
 
     /**
-     * ¡MÉTODO AÑADIDO!
-     * Escribe o agrega contenido a un archivo existente o nuevo.
-     * @param nombre El nombre del archivo.
-     * @param contenido El texto a escribir.
-     * @param agregar Si es 'true', agrega el contenido al final; si es 'false', sobrescribe el archivo.
+     * ¡NUEVO Y CORREGIDO!
+     * Abre un explorador de archivos nativo para seleccionar una carpeta.
      */
-    public void escribirArchivo(String nombre, String contenido, boolean agregar) throws IOException {
-        File archivo = gestor.obtenerElemento(nombre);
-        ArchivosUtil.IntArchivo.escribirArchivo(archivo, contenido, agregar);
-        String accion = agregar ? "agregado al" : "escrito en el";
+    public static File abrirExplorador() {
+        try {
+            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        } catch (Exception e) {
+            System.err.println("No se pudo establecer el look and feel del sistema.");
+        }
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        chooser.setDialogTitle("Selecciona una carpeta");
+        int resultado = chooser.showOpenDialog(null);
+        if (resultado == JFileChooser.APPROVE_OPTION) {
+            return chooser.getSelectedFile();
+        }
+        return null;
+    }
+
+    /**
+     * ¡NUEVO Y CORREGIDO!
+     * Abre un explorador y opcionalmente marca la carpeta seleccionada como la nueva raíz.
+     */
+    public File abrirExplorador(boolean marcarComoRaiz) {
+        File carpetaSeleccionada = abrirExplorador();
+        if (marcarComoRaiz && carpetaSeleccionada != null) {
+            System.out.println("Nueva carpeta raíz marcada: " + carpetaSeleccionada.getAbsolutePath());
+            this.gestor = new ArchivoManager(carpetaSeleccionada);
+        }
+        return carpetaSeleccionada;
+    }
+
+    /**
+     * ¡SOBRECARGA AÑADIDA!
+     * Permite la escritura inteligente. Si esJson es true, actualiza la clave o agrega la línea.
+     * Si es false, simplemente añade al final (útil para logs).
+     */
+    public void escribirArchivo(String nombre, String contenido, boolean agregar, boolean esJson) throws IOException {
+        ArchivosUtil.IntArchivo.escribirArchivo(obtenerFile(nombre), contenido, agregar, esJson);
+        String accion = esJson ? "actualizado/agregado en" : "agregado al";
         System.out.println("✅ Contenido " + accion + " archivo '" + nombre + "'.");
     }
+
+   
     
     public void crearCarpeta(String nombre) throws Exception {
         File nuevaCarpeta = gestor.obtenerElemento(nombre);
@@ -99,18 +162,38 @@ public class FileManager {
         System.out.println("✅ Carpeta '" + nombre + "' creada.");
     }
     
+    /**
+     * ¡LÓGICA MEJORADA!
+     * Ahora puede mover archivos/carpetas a una ruta absoluta o relativa.
+     */
     public void mover(String origenNombre, String destinoPath, boolean agregar) throws IOException {
         File origen = gestor.obtenerElemento(origenNombre);
-        File destino = new File(gestor.getMarcadorActual(), destinoPath);
+        File destino = new File(destinoPath);
+
+        // Si la ruta de destino no es absoluta, la hace relativa a la carpeta actual.
+        if (!destino.isAbsolute()) {
+            destino = new File(gestor.getMarcadorActual(), destinoPath);
+        }
+
         ArchivosUtil.ExtArchivo.moverArchivo(origen, destino, agregar);
-        System.out.println("✅ '" + origenNombre + "' movido a '" + destinoPath + "' (agregar=" + agregar + ").");
+        System.out.println("✅ '" + origenNombre + "' movido a '" + destinoPath + "'.");
     }
-    
+
+    /**
+     * ¡LÓGICA MEJORADA!
+     * Ahora puede copiar archivos/carpetas a una ruta absoluta o relativa.
+     */
     public void copiar(String origenNombre, String destinoPath, boolean agregar) throws IOException {
         File origen = gestor.obtenerElemento(origenNombre);
-        File destino = new File(gestor.getMarcadorActual(), destinoPath);
+        File destino = new File(destinoPath);
+
+        // Si la ruta de destino no es absoluta, la hace relativa a la carpeta actual.
+        if (!destino.isAbsolute()) {
+            destino = new File(gestor.getMarcadorActual(), destinoPath);
+        }
+        
         ArchivosUtil.ExtArchivo.copiarArchivo(origen, destino, agregar);
-        System.out.println("✅ '" + origenNombre + "' copiado a '" + destinoPath + "' (agregar=" + agregar + ").");
+        System.out.println("✅ '" + origenNombre + "' copiado a '" + destinoPath + "'.");
     }
     
     public void eliminar(String nombre) throws IOException {
